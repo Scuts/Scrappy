@@ -116,8 +116,6 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
             "page": i
         }
         result = await gqlClient.execute_async(authorizationsQuery, variable_values=params)
-        #discordIds.append(filter x: x)
-        #print(result)
         for player in result.get("tournament").get("participants").get("nodes"):
             if player.get("player").get("user") != None:
                 if player.get("player").get("user").get("authorizations") != None:
@@ -166,6 +164,10 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
                 await interaction.followup.send("There are over 16 users in this server registered for the requested tournament. Only the first 16 will be shown.")
             else:
                 playerIdDict[startGGid[0]]= discordIds[int(startGGid[1])]
+
+    if len(playerIdDict) == 0:
+        await interaction.followup.send("No users in this server were found in the requested tournament. This will only find users who have bound their Start.gg account to their Discord account.")
+        return
     
     gameImages = {}
     for playerId in playerIdDict.items():

@@ -34,7 +34,7 @@ async def on_ready():
 async def getSchedule (interaction: discord.Interaction, tournamentidentifier: str, serverwide: bool):
     await interaction.response.defer()
     logger = logging.getLogger('discordScrappy')
-    fileHandler = logging.FileHandler(os.getenv('LOG_PATH') + "\\" + date.today().strftime("%Y-%m-%d") + ".log", 'a')
+    fileHandler = logging.FileHandler(os.path.join(os.getenv('LOG_PATH'), date.today().strftime("%Y-%m-%d") + ".log"), 'a')
     fileHandler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     fileHandler.encoding = 'utf-8'
     fileHandler.setLevel(logging.INFO)

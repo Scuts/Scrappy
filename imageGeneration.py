@@ -11,6 +11,7 @@ cell_height = 96
 pfp_height = cell_height
 vertical_margin = 48
 horizontal_margin = 48
+footer_height = 48
 cell_margin = 8
 banner_height = 192
 textShadowOffset = 2
@@ -25,6 +26,7 @@ clr_black = (0, 0, 0, 255)
 
 load_dotenv()
 font = ImageFont.truetype(os.getenv("FONT_PATH"), 32)
+smallFont = ImageFont.truetype(os.getenv("FONT_PATH"), 20)
 
 def generateScheduleGraphic(scheduleDict, gameImagesDict, bannerImageUrl):
     uniqueTimeSlots = []
@@ -48,7 +50,7 @@ def generateScheduleGraphic(scheduleDict, gameImagesDict, bannerImageUrl):
         value["image"] = Image.open(requests.get(value.get("url"), stream=True).raw)
 
     totalImageWidth = cell_width*(len(scheduleDict) + 1) + (cell_margin * len(scheduleDict)) + (horizontal_margin * 2)
-    totalImageHeight = banner_height + ((len(uniqueTimeSlots)) * (cell_height + cell_margin)) + (len(uniqueDays) * (dateBarHeight + cell_margin)) + pfp_height + (vertical_margin * 2)
+    totalImageHeight = banner_height + ((len(uniqueTimeSlots)) * (cell_height + cell_margin)) + (len(uniqueDays) * (dateBarHeight + cell_margin)) + pfp_height + (vertical_margin * 2) + footer_height
 
     background = Image.new('RGBA',(totalImageWidth, totalImageHeight), backgroundColor)
     i = 0
@@ -125,4 +127,7 @@ def generateScheduleGraphic(scheduleDict, gameImagesDict, bannerImageUrl):
         draw.text(xy=(int(cell_width/2) + horizontal_margin + textShadowOffset, rectY + int(cell_height/2) + textShadowOffset), text = str(datetime.datetime.fromtimestamp(time).strftime('%H:%M')), font=font, anchor="mm", fill=clr_black)
         draw.text(xy=(int(cell_width/2) + horizontal_margin, rectY + int(cell_height/2)), text = str(datetime.datetime.fromtimestamp(time).strftime('%H:%M')), font=font, anchor="mm", fill=clr_white)
         i+=1
+    footerText = f"Generated at: {datetime.datetime.now().strftime('%y-%m-%d %I:%M%p')}"
+    draw.text(xy=(totalImageWidth - horizontal_margin + textShadowOffset, totalImageHeight - footer_height + textShadowOffset), text=footerText, anchor="rm", fill=clr_black,font=smallFont)
+    draw.text(xy=(totalImageWidth - horizontal_margin, totalImageHeight - footer_height), text=footerText, anchor="rm", fill=clr_white,font=smallFont)
     return background

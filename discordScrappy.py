@@ -38,7 +38,8 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
     fileHandler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     fileHandler.encoding = 'utf-8'
     fileHandler.setLevel(logging.INFO)
-    logger.addHandler(fileHandler)
+    if not len(logger.handlers):
+        logger.addHandler(fileHandler)
     logger.setLevel(logging.INFO)
 
     try:
@@ -47,12 +48,25 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
         
         discordIds = {}
         if serverwide:
-            for member in interaction.guild.members:
-                discordIds[member.id] = {
-                    'discordId' : member.id,
-                    'nick': member.nick,
-                    'pfp': member.avatar
-                }
+            if "thread" in str(interaction.channel.type):
+                members = await interaction.channel.fetch_members()
+                threadmembers = []
+                for member in members:
+                    threadmembers.append(member.id)
+                for member in interaction.guild.members:
+                    if member.id in threadmembers:
+                        discordIds[member.id] = {
+                            'discordId' : member.id,
+                            'nick': member.nick,
+                            'pfp': member.avatar
+                        }
+            else:
+                for member in interaction.guild.members:
+                    discordIds[member.id] = {
+                        'discordId' : member.id,
+                        'nick': member.nick,
+                        'pfp': member.avatar
+                    }
         else:
             discordIds[interaction.user.id] = {
                 'discordId' : interaction.user.id,
@@ -69,6 +83,16 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
                         type
                         url
                     }
+                    events {
+                        id
+                        videogame {
+                            displayName
+                            images {
+                                type
+                                url
+                                }
+                        }
+                    }
                 }
             }"""
         )
@@ -78,13 +102,13 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
 
         authorizationsQuery = gql(
         """
-        query TournamentQuery($slug: String, $page: Int) {
+        query TournamentQuery($slug: String, $page: Int, $perPage: Int) {
             tournament(slug: $slug) {
                 id
                 name
             participants(query: {
                 page: $page
-                perPage: 250
+                perPage: $perPage
             })
             {
                 nodes{
@@ -119,27 +143,38 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
                 if img.get("type") == "banner":
                     bannerImageUrl = img.get("url")
 
+        eventImages = {}
+        for event in numAttendeesResults.get("tournament").get("events"):
+            eventImages[event.get("id")] = event.get("videogame")
+
         numAttendees = numAttendeesResults.get("tournament").get("numAttendees")
 
-        for i in range(math.ceil(numAttendees / 250)):
-            params = {
-                "slug": tournamentidentifier,
-                "page": i
-            }
-            result = await gqlClient.execute_async(authorizationsQuery, variable_values=params)
-            for player in result.get("tournament").get("participants").get("nodes"):
-                if player.get("player").get("user") != None:
-                    if player.get("player").get("user").get("authorizations") != None:
-                        for authorization in player.get("player").get("user").get("authorizations"):
-                            if authorization.get("type") == "DISCORD" and authorization.get("externalId"):
-                                startGGIds.append([player.get("player").get("id"), authorization.get("externalId"), player.get("player").get("gamerTag")])
+        async def getParticipants(perPage):
+            for i in range(math.ceil(numAttendees / perPage) + 1):
+                params = {
+                    "slug": tournamentidentifier,
+                    "page": i,
+                    "perPage": perPage
+                }
+                result = await gqlClient.execute_async(authorizationsQuery, variable_values=params)
+                for player in result.get("tournament").get("participants").get("nodes"):
+                    if player.get("player").get("user") != None:
+                        if player.get("player").get("user").get("authorizations") != None:
+                            for authorization in player.get("player").get("user").get("authorizations"):
+                                if authorization.get("type") == "DISCORD" and authorization.get("externalId"):
+                                    startGGIds.append([player.get("player").get("id"), authorization.get("externalId"), player.get("player").get("gamerTag")])
 
+        
+        await getParticipants(241)
+        await getParticipants(263)
+        
         phaseGroupQuery = gql("""
             query PhaseGroupQuery($slug: String, $playerIds: [ID]) {
                 tournament(slug: $slug){
                     id
                     name
                     events {
+                        id
                         startAt
                         sets (perPage: 100, filters: {
                             playerIds: $playerIds
@@ -153,13 +188,6 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
                                     }
                                 }
                             }
-                        }
-                        videogame {
-                            displayName
-                            images {
-                                type
-                                url
-                                }
                         }
                     }
             }
@@ -198,23 +226,24 @@ async def getSchedule (interaction: discord.Interaction, tournamentidentifier: s
             
             for event in result.get("tournament").get("events"):
                 if event.get("sets").get("nodes"):
-                    for image in event.get("videogame").get("images"):
+                    videoGame = eventImages[event.get("id")]
+                    for image in videoGame.get("images"):
                         if image.get("type") == "primary":
-                            if event.get("videogame").get("displayName") not in gameImages:
+                            if videoGame.get("displayName") not in gameImages:
                                 gameImage = {}
                                 gameImage["url"] = image.get("url")
-                                gameImages[event.get("videogame").get("displayName")] = gameImage
+                                gameImages[videoGame.get("displayName")] = gameImage
                     if event.get("sets").get("nodes") and any(set.get("phaseGroup").get("startAt") for set in event.get("sets").get("nodes")):
                         for set in event.get("sets").get("nodes"):
-                            if event.get("videogame").get("displayName") + "_" + set.get("phaseGroup").get("displayIdentifier") not in playerSchedule:
-                                playerSchedule[event.get("videogame").get("displayName") + "_" + set.get("phaseGroup").get("displayIdentifier")] = {
-                                    "game": event.get("videogame").get("displayName"),
+                            if videoGame.get("displayName") + "_" + set.get("phaseGroup").get("displayIdentifier") not in playerSchedule:
+                                playerSchedule[videoGame.get("displayName") + "_" + set.get("phaseGroup").get("displayIdentifier")] = {
+                                    "game": videoGame.get("displayName"),
                                     "phase": set.get("phaseGroup").get("displayIdentifier"),
                                     "time": set.get("phaseGroup").get("startAt")
                                 }
                     else:
-                        playerSchedule[event.get("videogame").get("displayName")]= {
-                            "game": event.get("videogame").get("displayName"),
+                        playerSchedule[videoGame.get("displayName")]= {
+                            "game": videoGame.get("displayName"),
                             "phase": None,
                             "time": event.get("startAt")
                         }
